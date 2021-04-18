@@ -73,7 +73,7 @@ namespace DBCD
         string[] AvailableColumns { get; }
 
         Dictionary<ulong, int> GetEncryptedSections();
-        IDBCDStorage ApplyingHotfixes(HotfixReader hotfixReader);
+        IDBCDStorage ApplyingHotfixes(HotfixReader hotfixReader, List<int> pushIDFilter);
     }
 
     public class DBCDStorage<T> : ReadOnlyDictionary<int, DBCDRow>, IDBCDStorage where T : class, new()
@@ -101,11 +101,11 @@ namespace DBCD
                 base.Dictionary.Add(record.Key, new DBCDRow(record.Key, record.Value, fieldAccessor));
         }
 
-        public IDBCDStorage ApplyingHotfixes(HotfixReader hotfixReader)
+        public IDBCDStorage ApplyingHotfixes(HotfixReader hotfixReader, List<int> pushIDFilter)
         {
             var mutableStorage = this.storage.ToDictionary(k => k.Key, v => v.Value);
 
-            hotfixReader.ApplyHotfixes(mutableStorage, this.reader);
+            hotfixReader.ApplyHotfixes(mutableStorage, this.reader, pushIDFilter);
 
             return new DBCDStorage<T>(this.reader, new ReadOnlyDictionary<int, T>(mutableStorage), this.info);
         }
@@ -116,7 +116,7 @@ namespace DBCD
             while (enumerator.MoveNext())
                 yield return new DynamicKeyValuePair<int>(enumerator.Current.Key, enumerator.Current.Value);
         }
-        
+
         public Dictionary<ulong, int> GetEncryptedSections() => this.reader.GetEncryptedSections();
     }
 }

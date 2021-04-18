@@ -1,5 +1,6 @@
 ﻿using DBFileReaderLib.Readers;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -37,7 +38,7 @@ namespace DBFileReaderLib
         }
 
 
-        public void ApplyHotfixes<T>(IDictionary<int, T> storage, DBReader dbReader) where T : class, new() => ReadHotfixes(storage, dbReader);
+        public void ApplyHotfixes<T>(IDictionary<int, T> storage, DBReader dbReader, List<int> pushIDFilter = null) where T : class, new() => ReadHotfixes(storage, dbReader, pushIDFilter);
 
         public void CombineCaches(params string[] files)
         {
@@ -46,7 +47,7 @@ namespace DBFileReaderLib
                 CombineCache(file);
             }
         }
-        
+
         public void CombineCache(string file)
         {
             if (!File.Exists(file))
@@ -61,7 +62,7 @@ namespace DBFileReaderLib
             _reader.Combine(reader);
         }
 
-        protected virtual void ReadHotfixes<T>(IDictionary<int, T> storage, DBReader dbReader) where T : class, new()
+        protected virtual void ReadHotfixes<T>(IDictionary<int, T> storage, DBReader dbReader, List<int> pushIDFilter) where T : class, new()
         {
             var fieldCache = typeof(T).GetFields().Select(x => new FieldCache<T>(x)).ToArray();
 
@@ -70,14 +71,24 @@ namespace DBFileReaderLib
                 fieldCache[dbReader.IdFieldIndex].IndexMapField = true;
 
             // TODO verify hotfixes need to be applied sequentially
-            var records = _reader.GetRecords(dbReader.TableHash).OrderBy(x => x.PushId);
+
+            IEnumerable<HTFXRow> records;
+
+            if (pushIDFilter == null)
+            {
+                records = _reader.GetRecords(dbReader.TableHash).OrderBy(x => x.PushId);
+            }
+            else
+            {
+                records = _reader.GetRecords(dbReader.TableHash).Where(x => pushIDFilter.Contains(x.PushId)).OrderBy(x => x.PushId);
+            }
 
             // Check if there are any valid cached records with data, don't remove row if so. 
             // Example situation: Blizzard has invalidated TACTKey records in the same DBCache as valid ones.
             // Without the below check, valid cached TACTKey records would be removed by the invalidated records afterwards.
             // This only seems to be relevant for cached tables and specifically TACTKey, BroadcastText/ItemSparse only show up single times it seems.
             var shouldDelete = dbReader.TableHash != 3744420815 || !records.Any(r => r.IsValid && r.PushId == -1 && r.DataSize > 0);
-            
+
             foreach (var row in records)
             {
                 if (row.IsValid & row.DataSize > 0)
